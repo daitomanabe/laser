@@ -14,6 +14,7 @@
 </div>
 
 ## 📢 Updates
+* **[2026-02-21]** Paper accepted by CVPR 2026.
 * **[2025-12-15]** ArXiv preprint released.
 
 ## 📝 To-Do List
