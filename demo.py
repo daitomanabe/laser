@@ -10,7 +10,7 @@ import argparse
 from tqdm import tqdm
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-# bfloat16 is supported on Ampere GPUs (Compute Capability 8.0+) 
+# bfloat16 is supported on Ampere GPUs (Compute Capability 8.0+)
 dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
 
 
@@ -36,8 +36,13 @@ def load_model(args):
     if args.model_ckpt:
         model = Pi3().to(device)
         print('Loading checkpoint: ', args.model_ckpt)
-        ckpt = torch.load(args.model_ckpt, map_location=device)
-        print(model.load_state_dict(ckpt['model'], strict=True))
+        if args.model_ckpt.endswith('.safetensors'):
+            from safetensors.torch import load_file
+            ckpt = load_file(args.model_ckpt)
+        else:
+            ckpt = torch.load(args.model_ckpt, map_location=device, weights_only=False)
+
+        print(model.load_state_dict(ckpt, strict=True))
         del ckpt
     else:
         model = Pi3.from_pretrained("yyfz233/Pi3").to(device)
@@ -82,7 +87,7 @@ def run_model(image_names, scene_name, output_path):
     summary_text = f"""
     Summary:
         Inference sec: {duration / 1000}
-        Peak GPU memory usage (GB): {gpu_mem_usage / (1024 ** 3)} 
+        Peak GPU memory usage (GB): {gpu_mem_usage / (1024 ** 3)}
     """
     print(summary_text)
 
