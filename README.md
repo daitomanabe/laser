@@ -14,6 +14,7 @@
 </div>
 
 ## 📢 Updates
+* **[2026-03-12]** Loop-closure module released with robustness fix.
 * **[2026-02-21]** Paper accepted by CVPR 2026.
 * **[2025-12-15]** ArXiv preprint released.
 
