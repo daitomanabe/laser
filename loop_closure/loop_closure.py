@@ -54,6 +54,7 @@ class LoopClosureEngine:
             pi3_model,
             window_size,
             overlap,
+            sample_interval=1,
             top_conf_percentile=0.5
     ):
         self.config = config
@@ -65,9 +66,11 @@ class LoopClosureEngine:
 
         self.img_dir = image_dir
         self.img_list = None
+        self.sample_interval = sample_interval
 
         self.loop_detector = LoopDetector(
             image_dir=image_dir,
+            sample_interval=sample_interval,
             output=output_dir,
             config=config
         )
@@ -110,8 +113,8 @@ class LoopClosureEngine:
             if isinstance(predictions[key], torch.Tensor):
                 predictions[key] = predictions[key].cpu().squeeze(0)
 
-        conf_thre = torch.quantile(predictions['conf'], self.top_conf_percentile, interpolation='nearest')
-        predictions['mask'] = predictions['conf'] >= conf_thre
+        # conf_thre = torch.quantile(predictions['conf'], self.top_conf_percentile, interpolation='nearest')
+        # predictions['mask'] = predictions['conf'] >= conf_thre
 
         return predictions
 
@@ -141,14 +144,20 @@ class LoopClosureEngine:
 
             point_map_loop = item[1]['local_points'][:chunk_a_range[1] - chunk_a_range[0]]
             cam_pose_loop = item[1]['camera_poses'][:chunk_a_range[1] - chunk_a_range[0]]
-            conf_mask_loop = item[1]['mask'][:chunk_a_range[1] - chunk_a_range[0]]
+            # conf_mask_loop = item[1]['mask'][:chunk_a_range[1] - chunk_a_range[0]]
+            conf_map_loop = item[1]['conf'][:chunk_a_range[1] - chunk_a_range[0]]
+            conf_loop_thresh = torch.quantile(conf_map_loop, self.top_conf_percentile, interpolation='nearest')
+            conf_mask_loop = conf_map_loop >= conf_loop_thresh
 
             chunk_a_rela_begin = chunk_a_range[0] - self.chunk_indices[chunk_idx_a][0]
             chunk_a_rela_end = chunk_a_rela_begin + chunk_a_range[1] - chunk_a_range[0]
             chunk_data_a = raw_predictions[chunk_idx_a]
             point_map_a = chunk_data_a['local_points'][chunk_a_rela_begin:chunk_a_rela_end]
             cam_pose_a = chunk_data_a['camera_poses'][chunk_a_rela_begin:chunk_a_rela_end]
-            conf_mask_a = chunk_data_a['mask'][chunk_a_rela_begin:chunk_a_rela_end]
+            # conf_mask_a = chunk_data_a['mask'][chunk_a_rela_begin:chunk_a_rela_end]
+            conf_map_a = chunk_data_a['conf'][chunk_a_rela_begin:chunk_a_rela_end]
+            conf_a_thresh = torch.quantile(conf_map_a, self.top_conf_percentile, interpolation='nearest')
+            conf_mask_a = conf_map_a >= conf_a_thresh
 
             s_a, R_a, t_a = register_adjacent_windows(
                 point_map_a,
@@ -160,14 +169,20 @@ class LoopClosureEngine:
 
             point_map_loop = item[1]['local_points'][-chunk_b_range[1] + chunk_b_range[0]:]
             cam_pose_loop = item[1]['camera_poses'][-chunk_b_range[1] + chunk_b_range[0]:]
-            conf_mask_loop = item[1]['mask'][-chunk_b_range[1] + chunk_b_range[0]:]
+            # conf_mask_loop = item[1]['mask'][-chunk_b_range[1] + chunk_b_range[0]:]
+            conf_map_loop = item[1]['conf'][-chunk_b_range[1] + chunk_b_range[0]:]
+            conf_loop_thresh = torch.quantile(conf_map_loop, self.top_conf_percentile, interpolation='nearest')
+            conf_mask_loop = conf_map_loop >= conf_loop_thresh
 
             chunk_b_rela_begin = chunk_b_range[0] - self.chunk_indices[chunk_idx_b][0]
             chunk_b_rela_end = chunk_b_rela_begin + chunk_b_range[1] - chunk_b_range[0]
             chunk_data_b = raw_predictions[chunk_idx_b]
             point_map_b = chunk_data_b['local_points'][chunk_b_rela_begin:chunk_b_rela_end]
             cam_pose_b = chunk_data_b['camera_poses'][chunk_b_rela_begin:chunk_b_rela_end]
-            conf_mask_b = chunk_data_b['mask'][chunk_b_rela_begin:chunk_b_rela_end]
+            # conf_mask_b = chunk_data_b['mask'][chunk_b_rela_begin:chunk_b_rela_end]
+            conf_map_b = chunk_data_b['conf'][chunk_b_rela_begin:chunk_b_rela_end]
+            conf_b_thresh = torch.quantile(conf_map_b, self.top_conf_percentile, interpolation='nearest')
+            conf_mask_b = conf_map_b >= conf_b_thresh
 
             s_b, R_b, t_b = register_adjacent_windows(
                 point_map_b,
@@ -187,7 +202,7 @@ class LoopClosureEngine:
     def run(self, raw_predictions):
         print(f"Loading images from {self.img_dir}...")
         self.img_list = sorted(glob.glob(os.path.join(self.img_dir, "*.jpg")) +
-                               glob.glob(os.path.join(self.img_dir, "*.png")))
+                               glob.glob(os.path.join(self.img_dir, "*.png")))[::self.sample_interval]
 
         if len(self.img_list) == 0:
             raise ValueError(f"[DIR EMPTY] No images found in {self.img_dir}!")

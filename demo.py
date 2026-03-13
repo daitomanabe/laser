@@ -60,18 +60,19 @@ def load_model(args):
 
 
 def run_model(image_names, scene_name, output_path):
-    images = load_and_preprocess_images(image_names).to(device)
-    image_windows = model.img_sliding_window(images)
+    image_name_windows = model.img_sliding_window(image_names)
 
     start_ev = torch.cuda.Event(enable_timing=True)
     end_ev = torch.cuda.Event(enable_timing=True)
     model.begin()
 
     start_ev.record()
-    for sample in tqdm(image_windows, 'Window inference'):
-        model(sample)
+    for sample in tqdm(image_name_windows, 'Window inference'):
+        imgs = load_and_preprocess_images(sample).to(device)
+        model(imgs)
     model.end()
     end_ev.record()
+    duration = start_ev.elapsed_time(end_ev)
 
     save_dict = model.parse_inference_cache_summary()
     for key in save_dict.keys():
@@ -81,7 +82,6 @@ def run_model(image_names, scene_name, output_path):
     save_for_viser(save_dict, scene_name, output_path, inverse_extrinsic=False)
 
     torch.cuda.synchronize()  # make sure the event timestamps are set
-    duration = start_ev.elapsed_time(end_ev)
     gpu_mem_usage = torch.cuda.max_memory_allocated()
 
     summary_text = f"""

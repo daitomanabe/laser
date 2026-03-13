@@ -3,6 +3,7 @@ import numpy as np
 from skimage.segmentation import felzenszwalb
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from .fast_seg import fast_graph_segmentation
 from ._segmentation_cy import merge_regions
 from pi3.utils.graph import Vertex
 
@@ -43,18 +44,46 @@ def align_depth_irls(
 
 def segment_depth_felzenszwalb_rag(
         depth_map,
-        merge_thresh,
+        depth_merge_thresh,
+        conf_map=None,
+        top_conf_percentile=None,
         seg_scale=300,
         seg_sigma=1.1,
-        seg_min_size=500
+        seg_min_size=500,
+        batch_idx=None
 ):
     seg_mask = felzenszwalb(depth_map, scale=seg_scale, sigma=seg_sigma, min_size=seg_min_size)
     # depth_img = gray2rgb(depth_map)
     # rag = graph.rag_mean_color(depth_img, seg_mask, mode='distance')
     #
     # seg_mask_merged = graph.cut_threshold(seg_mask, rag, merge_thresh)
+    if conf_map is not None and top_conf_percentile is not None:
+        conf_map = conf_map[batch_idx]
+        conf_thresh = np.quantile(conf_map.reshape(-1), top_conf_percentile, method='nearest')
+        conf_depth = depth_map[conf_map >= conf_thresh]
+    else:
+        conf_depth = depth_map
+    merge_thresh = depth_merge_thresh * (np.max(conf_depth) - np.min(conf_depth))
+
     seg_mask_merged = merge_regions(seg_mask, depth_map, merge_thresh)
     return seg_mask_merged
+
+
+def segment_depth_graph_fast(
+        depth_map,
+        depth_merge_thresh,
+        conf_map=None,
+        top_conf_percentile=None,
+        batch_idx=None
+):
+    if conf_map is not None and top_conf_percentile is not None:
+        conf_map = conf_map[batch_idx]
+        conf_thresh = np.quantile(conf_map.reshape(-1), top_conf_percentile, method='nearest')
+        conf_depth = depth_map[conf_map >= conf_thresh]
+    else:
+        conf_depth = depth_map
+    merge_thresh = depth_merge_thresh * (np.max(conf_depth) - np.min(conf_depth))
+    return fast_graph_segmentation(depth_map, merge_thresh)
 
 
 def pairwise_intersection_ratio(mask1, mask2):
